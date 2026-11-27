@@ -1,0 +1,188 @@
+<!doctype html><html lang="th"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>บ้านพร้อม · ดูแลบ้าน</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eef4f2;color:#17352f;font:16px system-ui,sans-serif}header{background:#103a33;color:white;padding:18px max(20px,calc((100% - 980px)/2));display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}nav,.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}main{max-width:1020px;margin:auto;padding:24px 20px}.hero{background:#16473d;color:white;padding:30px;border-radius:22px;margin-bottom:20px}h1,h2,p{margin:0 0 12px}h1{font-size:clamp(26px,5vw,42px)}h2{font-size:20px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:14px}.card,section{background:white;border:1px solid #d6e5df;border-radius:16px;padding:18px;margin-bottom:12px}.grid .card{margin:0}button,input,select{font:inherit;border:1px solid #a7c1b8;border-radius:9px;padding:9px 12px}button{cursor:pointer;background:white;color:#17352f}.primary{background:#216b55;color:white;border-color:#216b55}.entry{display:block;text-align:left;width:100%;margin-top:8px}.muted,small{color:#45665d}.label{color:#9a3e27}footer{margin-top:28px;color:#45665d}dialog{border:0;border-radius:18px;width:min(92vw,550px);max-height:90vh;padding:22px}dialog::backdrop{background:#102d27aa}label{display:grid;gap:5px;margin-bottom:10px}input,select{min-width:0;background:white}form input,form select{width:100%}article{border-top:1px solid #d6e5df;padding:12px 0}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #e0a62e}.filters{margin-bottom:16px}
+.photo{display:block;max-width:100%;max-height:220px;border-radius:12px;margin:8px 0}.entry .photo{max-height:80px}.summary{display:flex;align-items:baseline;gap:12px}.summary strong{font-size:2rem}.overdue{background:#ffe0df;border-color:#e3716b;color:#831e22}.upcoming{background:#baf77e;border-color:#77c64a;color:#214714}</style>
+<header><strong>⌂ บ้านพร้อม</strong><nav><button data-a="home">ภาพรวม</button><button data-a="list">รายการในบ้าน</button><button class="primary" data-a="add">＋ เพิ่มรายการ</button><button data-a="export">ส่งออกข้อมูลและรูป</button></nav></header><main></main><dialog></dialog>
+<script>
+const categories=['เครื่องใช้ไฟฟ้า','อุปกรณ์และสุขภัณฑ์','พื้นผิวหรือส่วนประกอบของบ้าน'];
+const statuses=['รอนัดช่าง','กำลังซ่อม','แก้ไขแล้ว'];
+const key='baan-prom-v1', main=document.querySelector('main'), dialog=document.querySelector('dialog');
+const escapeMap={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>escapeMap[c]);
+const iso=d=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
+const today=()=>iso(new Date());
+function shift(date,n,unit){
+  const d=new Date(date+'T12:00:00');
+  if(unit==='วัน'){d.setDate(d.getDate()+n);return iso(d)}
+  const day=d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth()+n*(unit==='ปี'?12:1));
+  d.setDate(Math.min(day,new Date(d.getFullYear(),d.getMonth()+1,0).getDate()));
+  return iso(d);
+}
+const fmt=date=>date?new Intl.DateTimeFormat('th-TH',{dateStyle:'medium'}).format(new Date(date+'T12:00:00')):'';
+const id=()=>crypto.randomUUID?.()??Math.random().toString(36).slice(2);
+const due=n=>shift(today(),n,'วัน');
+let items, storageError=false;
+const examples=[
+ ['แอร์','ห้องนอน',0,'ลมเบา','ทำความสะอาดแผ่นกรอง',['ทำความสะอาดแผ่นกรอง','ล้างแอร์']],
+ ['ก๊อกน้ำ','อ่างล้างหน้าชั้นล่าง',1,'น้ำหยดหลังปิดก๊อก','ตรวจซีล',['ตรวจรอยรั่วและทำความสะอาดหัวก๊อก']],
+ ['ชักโครก','ห้องน้ำชั้นล่าง',1,'น้ำไหลลงโถตลอด','ตรวจชุดวาล์ว',['ตรวจการรั่วและลูกลอย']],
+ ['พื้นกระเบื้อง','ห้องน้ำชั้นบน',2,'ยาแนวหลุด','บันทึกจุดที่ต้องซ่อม',['ตรวจยาแนวและกระเบื้อง']]
+];
+function seed(){
+ return examples.map(([name,place,cat,symptom,solution,tasks],i)=>({id:id(),name,place,cat:categories[cat],model:i===0?'AC-12000':'',expiry:i===0?due(18):'',repairs:[{date:due(-12),symptom,solution,status:statuses[i%3]}],tasks:tasks.map((name,j)=>({name,n:j?6:1,unit:'เดือน',date:due(j?8:[-2,0,4,7][i]),history:[]}))}));
+}
+try{items=JSON.parse(localStorage.getItem(key))??seed();localStorage.setItem(key,JSON.stringify(items))}
+catch{items??=seed();storageError=true}
+let page='home', selected, query='', catFilter='', placeFilter='';
+function warranty(item){
+ if(item.expiry)return {date:item.expiry,text:fmt(item.expiry)};
+ if(item.years!==''&&item.years!=null){
+  if(item.purchase){const date=shift(item.purchase,+item.years,'ปี');return {date,text:fmt(date)+' (คำนวณจากวันที่ซื้อ)'}}
+  if(item.year)return {text:'ประมาณ พ.ศ. '+(+item.year+ +item.years+543)};
+ }
+ return {text:'ไม่ทราบกำหนดหมดประกัน'};
+}
+function btn(label,action,arg='',primary=false){return '<button class="'+(primary?'primary':'')+'" data-a="'+action+'" data-i="'+esc(arg)+'">'+esc(label)+'</button>'}
+function entry(item,title,meta,showPhoto=false){return '<button class="entry" data-a="detail" data-i="'+esc(item.id)+'"><strong>'+esc(title)+'</strong><br><small>'+esc(meta)+'</small>'+(showPhoto?photo(item):'')+'</button>'}
+function home(){
+ const tasks=items.flatMap(item=>item.tasks.map(task=>({item,task}))).sort((a,b)=>a.task.date.localeCompare(b.task.date));
+ const groups=[['เลยกำหนด',tasks.filter(x=>x.task.date<today())],['ถึงกำหนดวันนี้',tasks.filter(x=>x.task.date===today())],['ภายใน 7 วัน',tasks.filter(x=>x.task.date>today()&&x.task.date<=due(7))]];
+ return '<div class="hero"><h1>ภาพรวมการดูแลบ้าน</h1><p>'+fmt(today())+'</p></div><section class="summary" aria-label="จำนวนรายการในบ้าน"><strong>'+items.length+'</strong><span>รายการในบ้านทั้งหมด</span></section><div class="grid">'+groups.map(([name,rows],index)=>'<div class="card '+['overdue','','upcoming'][index]+'"><h2>'+name+' · '+rows.length+'</h2>'+(rows.map(({item,task})=>entry(item,task.name,item.name+' · '+fmt(task.date))).join('')||'<p class="muted">ไม่มีงานในช่วงนี้</p>')+'</div>').join('')+'<div class="card"><h2>ประกันหมดภายใน 30 วัน</h2>'+(items.filter(x=>warranty(x).date>=today()&&warranty(x).date<=due(30)).sort((a,b)=>warranty(a).date.localeCompare(warranty(b).date)).map(x=>entry(x,x.name,warranty(x).text)).join('')||'<p class="muted">ไม่มีรายการใกล้หมดประกัน</p>')+'</div></div>';
+}
+function options(values,current){return values.map(v=>'<option'+(v===current?' selected':'')+'>'+esc(v)+'</option>').join('')}
+function results(){
+ return items.filter(x=>(!catFilter||x.cat===catFilter)&&(!placeFilter||x.place===placeFilter)&&[x.name,x.model,x.place].some(v=>String(v??'').toLowerCase().includes(query.trim().toLowerCase()))).map(x=>entry(x,x.name,[x.place,x.cat,x.model].filter(Boolean).join(' · '),true)).join('')||'<p>ไม่พบรายการ</p>';
+}
+function list(){
+ return '<h1>รายการในบ้าน</h1><div class="row filters"><input id="search" aria-label="ค้นหารายการ" placeholder="ค้นหาชื่อ รุ่น หรือจุดติดตั้ง" value="'+esc(query)+'"><select id="category" aria-label="หมวดหมู่"><option value="">ทุกหมวดหมู่</option>'+options(categories,catFilter)+'</select><select id="place" aria-label="พื้นที่"><option value="">ทุกพื้นที่</option>'+options([...new Set(items.map(x=>x.place))],placeFilter)+'</select></div><div id="results">'+results()+'</div>';
+}
+function detail(x){
+ const attrs=[['ยี่ห้อ',x.brand],['รุ่น',x.model],['ซื้อ',x.purchase?fmt(x.purchase):x.year?'พ.ศ. '+(+x.year+543):''],['ติดตั้ง',x.installed?fmt(x.installed):x.installYear?'พ.ศ. '+(+x.installYear+543):''],['ระยะประกัน',x.years?x.years+' ปี':''],['วัสดุหรืออะไหล่',x.notes]];
+ const repairs=x.repairs.map((r,i)=>({...r,i})).sort((a,b)=>b.date.localeCompare(a.date)||b.i-a.i);
+ return '<div class="hero"><h1>'+esc(x.name)+'</h1><p>'+esc(x.place)+' · '+esc(x.cat)+'</p>'+btn('แก้ไขข้อมูล','edit')+'</div><section><h2>ข้อมูลและประกัน</h2>'+photo(x)+'<p>หมดประกัน '+esc(warranty(x).text)+'</p>'+attrs.filter(([,v])=>v).map(([k,v])=>'<p>'+k+' · '+esc(v)+'</p>').join('')+'</section><section><h2>ประวัติปัญหาและการซ่อม</h2>'+btn('บันทึกปัญหา','repair','',true)+(repairs.map(r=>'<article><strong>'+esc(r.symptom)+'</strong><p>'+fmt(r.date)+' · '+esc(r.status)+'</p><p>'+esc(r.solution)+'</p>'+btn('แก้ไขบันทึก','repair',r.i)+'</article>').join('')||'<p>ยังไม่มีประวัติ</p>')+'</section><section><h2>งานบำรุงรักษา</h2>'+btn('เพิ่มงาน','task','',true)+(x.tasks.map((t,i)=>'<article><strong>'+esc(t.name)+'</strong><p>ทุก '+esc(t.n)+' '+esc(t.unit)+' · กำหนด '+fmt(t.date)+'</p>'+btn('ทำแล้ว','done',i,true)+' '+btn('แก้ไขงาน','task',i)+(t.history.length?'<details><summary>ประวัติการทำงาน ('+t.history.length+')</summary>'+[...t.history].sort().reverse().map(d=>'<p>'+fmt(d)+'</p>').join('')+'</details>':'')+'</article>').join('')||'<p>ยังไม่มีงานบำรุงรักษา</p>')+'</section>';
+}
+function render(){
+ main.innerHTML=(page==='list'?list():page==='detail'?detail(selected):home())+'<footer>ข้อมูลเก็บในเบราว์เซอร์นี้บนอุปกรณ์นี้ มือถือหรือเบราว์เซอร์เครื่องอื่นจะมีข้อมูลแยกกัน แจ้งเตือนในหน้าภาพรวมเมื่อเปิดแอป</footer>'+(storageError?'<p role="alert" class="label">เบราว์เซอร์นี้บันทึกข้อมูลถาวรไม่ได้</p>':'');
+}
+function field(label,name,value='',type='text',constraints=''){
+ return '<label>'+label+'<input name="'+name+'" type="'+type+'" value="'+esc(value)+'" '+constraints+'></label>';
+}
+function select(label,name,values,current){return '<label>'+label+'<select name="'+name+'">'+options(values,current)+'</select></label>'}
+function modal(title,fields,save){
+ dialog.innerHTML='<form><h2>'+title+'</h2>'+fields+'<p role="alert" class="label"></p><div class="row"><button class="primary">บันทึก</button><button type="button" data-a="close">ยกเลิก</button></div></form>';
+ dialog.querySelector('form').onsubmit=async e=>{
+  e.preventDefault();
+  const data=Object.fromEntries(new FormData(e.currentTarget));
+  for(const input of e.currentTarget.querySelectorAll('input[type=text]')){
+   data[input.name]=input.value.trim();
+   if(input.required&&!data[input.name]){input.value='';input.reportValidity();return}
+  }
+  const form=e.currentTarget;
+  const alert=form.querySelector('[role=alert]');
+  const buttons=[...form.querySelectorAll('button')];
+  const preventClose=event=>event.preventDefault();
+  buttons.forEach(button=>button.disabled=true);
+  dialog.addEventListener('cancel',preventClose);
+  alert.textContent='';
+  try{
+   if(data.photoFile?.size){
+    try{data.photo=await preparePhoto(data.photoFile)}
+    catch{alert.textContent='เปิดรูปไม่ได้ กรุณาเลือกไฟล์ JPEG, PNG หรือ WebP';return}
+   }else if(data.removePhoto){data.photo=''}
+   delete data.photoFile;
+   delete data.removePhoto;
+   save(data);
+  }catch{
+   alert.textContent='บันทึกไม่ได้ พื้นที่เก็บข้อมูลของเบราว์เซอร์อาจเต็ม';
+   return;
+  }finally{
+   buttons.forEach(button=>button.disabled=false);
+   dialog.removeEventListener('cancel',preventClose);
+  }
+  try{localStorage.setItem(key,JSON.stringify(items));storageError=false}catch{storageError=true}
+  dialog.close();render();
+ };
+ dialog.showModal();
+}
+function photo(item){
+ return item.photo?'<img class="photo" src="'+esc(item.photo)+'" alt="รูปอุปกรณ์">':'';
+}
+async function preparePhoto(file){
+ const url=URL.createObjectURL(file);
+ try{
+  const img=new Image();
+  img.src=url;
+  await img.decode();
+  const scale=Math.min(1,960/Math.max(img.naturalWidth,img.naturalHeight));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+  canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='white';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  return canvas.toDataURL('image/jpeg',0.76);
+ }finally{URL.revokeObjectURL(url)}
+}
+function itemForm(item){
+ const x=item??{};
+ modal(item?'แก้ไขรายการ':'เพิ่มรายการ',field('ชื่อรายการ','name',x.name,'text','required')+select('หมวดหมู่','cat',categories,x.cat)+field('จุดติดตั้งหรือพื้นที่','place',x.place,'text','required')+field('ยี่ห้อ','brand',x.brand)+field('รุ่น','model',x.model)+field('ปีที่ซื้อ (ค.ศ.)','year',x.year,'number','min="1900" max="9999"')+field('วันที่ซื้อ','purchase',x.purchase,'date')+field('ปีที่ติดตั้ง (ค.ศ.)','installYear',x.installYear,'number','min="1900" max="9999"')+field('วันที่ติดตั้ง','installed',x.installed,'date')+field('ประกัน (ปี)','years',x.years,'number','min="0" max="100"')+field('วันหมดประกันตามเอกสาร','expiry',x.expiry,'date')+field('วัสดุหรืออะไหล่','notes',x.notes)+photo(x)+'<label>รูปอุปกรณ์ (JPEG, PNG, WebP)<input type="file" name="photoFile" accept="image/jpeg,image/png,image/webp"></label>'+(x.photo?'<label><span><input style="width:auto" type="checkbox" name="removePhoto"> ลบรูปเดิม</span></label>':''),data=>{
+  if(item){
+   const updated={...item,...data};
+   const next=items.map(record=>record.id===item.id?updated:record);
+   localStorage.setItem(key,JSON.stringify(next));
+   items=next;
+   selected=updated;
+  }
+  else{const added={...data,id:id(),repairs:[],tasks:[]};
+   const next=[...items,added];
+   localStorage.setItem(key,JSON.stringify(next));
+   items=next;
+   selected=added}
+  page='detail';
+ });
+}
+document.addEventListener('click',event=>{
+ const button=event.target.closest('[data-a]');
+ if(!button)return;
+ const {a,i}=button.dataset;
+ if(a==='export'){
+  const backup={format:'baan-prom-backup',version:1,exportedAt:new Date().toISOString(),items};
+  const url=URL.createObjectURL(new Blob([JSON.stringify(backup)],{type:'application/json'}));
+  const link=document.createElement('a');
+  link.href=url;
+  link.download='baan-prom-backup-'+today()+'.json';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  return;
+ }
+ if(a==='home'||a==='list'){page=a;render()}
+ if(a==='detail'){selected=items.find(x=>x.id===i);page=a;render();window.scrollTo(0,0)}
+ if(a==='add'||a==='edit')itemForm(a==='edit'?selected:null);
+ if(a==='close')dialog.close();
+ if(a==='repair'){
+  const r=i===''?null:selected.repairs[+i];
+  modal(r?'แก้ไขบันทึก':'บันทึกปัญหา',field('วันที่พบปัญหา','date',r?.date??today(),'date','required')+field('อาการ','symptom',r?.symptom,'text','required')+field('วิธีจัดการ','solution',r?.solution)+select('สถานะ','status',statuses,r?.status),data=>{if(r)Object.assign(r,data);else selected.repairs.push(data)});
+ }
+ if(a==='task'){
+  const task=i===''?null:selected.tasks[+i];
+  modal(task?'แก้ไขงาน':'เพิ่มงานบำรุงรักษา',field('ชื่องาน','name',task?.name,'text','required')+field('ทำทุก','n',task?.n??1,'number','required min="1" max="1000"')+select('หน่วย','unit',['วัน','เดือน','ปี'],task?.unit??'เดือน')+field('วันครบกำหนด','date',task?.date??today(),'date','required'),data=>{if(task)Object.assign(task,data);else selected.tasks.push({...data,history:[]})});
+ }
+ if(a==='done'){
+  const task=selected.tasks[+i];
+  modal('บันทึกวันที่ทำงาน',field('วันที่ทำจริง','date',today(),'date','required max="'+today()+'"'),data=>{task.history.push(data.date);task.date=shift(data.date,+task.n,task.unit)});
+ }
+});
+main.addEventListener('input',e=>{
+ if(e.target.id==='search')query=e.target.value;
+ else if(e.target.id==='category')catFilter=e.target.value;
+ else if(e.target.id==='place')placeFilter=e.target.value;
+ else return;
+ document.querySelector('#results').innerHTML=results();
+});
+render();
+</script></html>
