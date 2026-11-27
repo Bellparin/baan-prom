@@ -1,7 +1,7 @@
 <!doctype html><html lang="th"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>บ้านพร้อม · ดูแลบ้าน</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#eef4f2;color:#17352f;font:16px system-ui,sans-serif}header{background:#103a33;color:white;padding:18px max(20px,calc((100% - 980px)/2));display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}nav,.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}main{max-width:1020px;margin:auto;padding:24px 20px}.hero{background:#16473d;color:white;padding:30px;border-radius:22px;margin-bottom:20px}h1,h2,p{margin:0 0 12px}h1{font-size:clamp(26px,5vw,42px)}h2{font-size:20px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:14px}.card,section{background:white;border:1px solid #d6e5df;border-radius:16px;padding:18px;margin-bottom:12px}.grid .card{margin:0}button,input,select{font:inherit;border:1px solid #a7c1b8;border-radius:9px;padding:9px 12px}button{cursor:pointer;background:white;color:#17352f}.primary{background:#216b55;color:white;border-color:#216b55}.entry{display:block;text-align:left;width:100%;margin-top:8px}.muted,small{color:#45665d}.label{color:#9a3e27}footer{margin-top:28px;color:#45665d}dialog{border:0;border-radius:18px;width:min(92vw,550px);max-height:90vh;padding:22px}dialog::backdrop{background:#102d27aa}label{display:grid;gap:5px;margin-bottom:10px}input,select{min-width:0;background:white}form input,form select{width:100%}article{border-top:1px solid #d6e5df;padding:12px 0}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #e0a62e}.filters{margin-bottom:16px}
-.photo{display:block;max-width:100%;max-height:220px;border-radius:12px;margin:8px 0}.entry .photo{max-height:80px}.summary{display:flex;align-items:baseline;gap:12px}.summary strong{font-size:2rem}.overdue{background:#ffe0df;border-color:#e3716b;color:#831e22}.upcoming{background:#baf77e;border-color:#77c64a;color:#214714}</style>
+.photo{display:block;max-width:100%;max-height:220px;border-radius:12px;margin:8px 0}.entry .photo{max-height:80px}.summary{display:flex;align-items:baseline;gap:12px}.summary strong{font-size:2rem}.overdue{background:#ffe0df;border-color:#e3716b;color:#831e22}.upcoming{background:#baf77e;border-color:#77c64a;color:#214714}.device-icon{display:inline-grid;place-items:center;width:2em;height:2em;margin-inline-end:.4em;vertical-align:middle;border-radius:.65em;background:#dff3ec;font-size:.85em;color:#17352f}.hero .device-icon{background:#ffffffec}</style>
 <header><strong>⌂ บ้านพร้อม</strong><nav><button data-a="home">ภาพรวม</button><button data-a="list">รายการในบ้าน</button><button class="primary" data-a="add">＋ เพิ่มรายการ</button><button data-a="export">ส่งออกข้อมูลและรูป</button></nav></header><main></main><dialog></dialog>
 <script>
 const categories=['เครื่องใช้ไฟฟ้า','อุปกรณ์และสุขภัณฑ์','พื้นผิวหรือส่วนประกอบของบ้าน'];
@@ -45,7 +45,25 @@ function warranty(item){
  return {text:'ไม่ทราบกำหนดหมดประกัน'};
 }
 function btn(label,action,arg='',primary=false){return '<button class="'+(primary?'primary':'')+'" data-a="'+action+'" data-i="'+esc(arg)+'">'+esc(label)+'</button>'}
-function entry(item,title,meta,showPhoto=false){return '<button class="entry" data-a="detail" data-i="'+esc(item.id)+'"><strong>'+esc(title)+'</strong><br><small>'+esc(meta)+'</small>'+(showPhoto?photo(item):'')+'</button>'}
+function deviceIcon(item){
+ const description=[item.name,item.model,item.notes].filter(Boolean).join(' ').toLowerCase();
+ const types=[
+  [/เครื่องซักผ้า|เครื่องอบผ้า|washer|dryer/,'🧺'],
+  [/ตู้เย็น|ตู้แช่|fridge|freezer/,'🧊'],
+  [/แอร์|ปรับอากาศ|air conditioner/,'❄️'],
+  [/โทรทัศน์|ทีวี|\btv\b/,'📺'],
+  [/ไฟส่องสว่าง|โคมไฟ|หลอดไฟ/,'💡'],
+  [/ไมโครเวฟ|เตาอบ|เตาไฟฟ้า|หม้อหุงข้าว/,'🍳'],
+  [/ก๊อก|ก็อก|ประปา|ปั๊มน้ำ|faucet/,'🚰'],
+  [/ชักโครก|โถส้วม|toilet/,'🚽'],
+  [/ฝักบัว|shower/,'🚿'],
+  [/พื้น|กระเบื้อง|ยาแนว|tile/,'▦']
+ ];
+ const fallback=item.cat===categories[0]?'🔌':item.cat===categories[1]?'🔧':'⌂';
+ const icon=types.find(([pattern])=>pattern.test(description))?.[1]??fallback;
+ return '<span class="device-icon" aria-hidden="true">'+icon+'</span>';
+}
+function entry(item,title,meta,showPhoto=false){return '<button class="entry" data-a="detail" data-i="'+esc(item.id)+'"><strong>'+deviceIcon(item)+esc(title)+'</strong><br><small>'+esc(meta)+'</small>'+(showPhoto?photo(item):'')+'</button>'}
 function home(){
  const tasks=items.flatMap(item=>item.tasks.map(task=>({item,task}))).sort((a,b)=>a.task.date.localeCompare(b.task.date));
  const groups=[['เลยกำหนด',tasks.filter(x=>x.task.date<today())],['ถึงกำหนดวันนี้',tasks.filter(x=>x.task.date===today())],['ภายใน 7 วัน',tasks.filter(x=>x.task.date>today()&&x.task.date<=due(7))]];
@@ -61,7 +79,7 @@ function list(){
 function detail(x){
  const attrs=[['ยี่ห้อ',x.brand],['รุ่น',x.model],['ซื้อ',x.purchase?fmt(x.purchase):x.year?'พ.ศ. '+(+x.year+543):''],['ติดตั้ง',x.installed?fmt(x.installed):x.installYear?'พ.ศ. '+(+x.installYear+543):''],['ระยะประกัน',x.years?x.years+' ปี':''],['วัสดุหรืออะไหล่',x.notes]];
  const repairs=x.repairs.map((r,i)=>({...r,i})).sort((a,b)=>b.date.localeCompare(a.date)||b.i-a.i);
- return '<div class="hero"><h1>'+esc(x.name)+'</h1><p>'+esc(x.place)+' · '+esc(x.cat)+'</p>'+btn('แก้ไขข้อมูล','edit')+'</div><section><h2>ข้อมูลและประกัน</h2>'+photo(x)+'<p>หมดประกัน '+esc(warranty(x).text)+'</p>'+attrs.filter(([,v])=>v).map(([k,v])=>'<p>'+k+' · '+esc(v)+'</p>').join('')+'</section><section><h2>ประวัติปัญหาและการซ่อม</h2>'+btn('บันทึกปัญหา','repair','',true)+(repairs.map(r=>'<article><strong>'+esc(r.symptom)+'</strong><p>'+fmt(r.date)+' · '+esc(r.status)+'</p><p>'+esc(r.solution)+'</p>'+btn('แก้ไขบันทึก','repair',r.i)+'</article>').join('')||'<p>ยังไม่มีประวัติ</p>')+'</section><section><h2>งานบำรุงรักษา</h2>'+btn('เพิ่มงาน','task','',true)+(x.tasks.map((t,i)=>'<article><strong>'+esc(t.name)+'</strong><p>ทุก '+esc(t.n)+' '+esc(t.unit)+' · กำหนด '+fmt(t.date)+'</p>'+btn('ทำแล้ว','done',i,true)+' '+btn('แก้ไขงาน','task',i)+(t.history.length?'<details><summary>ประวัติการทำงาน ('+t.history.length+')</summary>'+[...t.history].sort().reverse().map(d=>'<p>'+fmt(d)+'</p>').join('')+'</details>':'')+'</article>').join('')||'<p>ยังไม่มีงานบำรุงรักษา</p>')+'</section>';
+ return '<div class="hero"><h1>'+deviceIcon(x)+esc(x.name)+'</h1><p>'+esc(x.place)+' · '+esc(x.cat)+'</p>'+btn('แก้ไขข้อมูล','edit')+'</div><section><h2>ข้อมูลและประกัน</h2>'+photo(x)+'<p>หมดประกัน '+esc(warranty(x).text)+'</p>'+attrs.filter(([,v])=>v).map(([k,v])=>'<p>'+k+' · '+esc(v)+'</p>').join('')+'</section><section><h2>ประวัติปัญหาและการซ่อม</h2>'+btn('บันทึกปัญหา','repair','',true)+(repairs.map(r=>'<article><strong>'+esc(r.symptom)+'</strong><p>'+fmt(r.date)+' · '+esc(r.status)+'</p><p>'+esc(r.solution)+'</p>'+btn('แก้ไขบันทึก','repair',r.i)+'</article>').join('')||'<p>ยังไม่มีประวัติ</p>')+'</section><section><h2>งานบำรุงรักษา</h2>'+btn('เพิ่มงาน','task','',true)+(x.tasks.map((t,i)=>'<article><strong>'+esc(t.name)+'</strong><p>ทุก '+esc(t.n)+' '+esc(t.unit)+' · กำหนด '+fmt(t.date)+'</p>'+btn('ทำแล้ว','done',i,true)+' '+btn('แก้ไขงาน','task',i)+(t.history.length?'<details><summary>ประวัติการทำงาน ('+t.history.length+')</summary>'+[...t.history].sort().reverse().map(d=>'<p>'+fmt(d)+'</p>').join('')+'</details>':'')+'</article>').join('')||'<p>ยังไม่มีงานบำรุงรักษา</p>')+'</section>';
 }
 function render(){
  main.innerHTML=(page==='list'?list():page==='detail'?detail(selected):home())+'<footer>ข้อมูลเก็บในเบราว์เซอร์นี้บนอุปกรณ์นี้ มือถือหรือเบราว์เซอร์เครื่องอื่นจะมีข้อมูลแยกกัน แจ้งเตือนในหน้าภาพรวมเมื่อเปิดแอป</footer>'+(storageError?'<p role="alert" class="label">เบราว์เซอร์นี้บันทึกข้อมูลถาวรไม่ได้</p>':'');
