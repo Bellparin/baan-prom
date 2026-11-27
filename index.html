@@ -35,7 +35,7 @@ function seed(){
 }
 try{items=JSON.parse(localStorage.getItem(key))??seed();localStorage.setItem(key,JSON.stringify(items))}
 catch{items??=seed();storageError=true}
-let page='home', selected, query='', catFilter='', placeFilter='';
+let page='home', selected, query='', catFilter='', placeFilter='', placeQuery='';
 function warranty(item){
  if(item.expiry)return {date:item.expiry,text:fmt(item.expiry)};
  if(item.years!==''&&item.years!=null){
@@ -70,11 +70,12 @@ function home(){
  return '<div class="hero"><h1>ภาพรวมการดูแลบ้าน</h1><p>'+fmt(today())+'</p></div><section class="summary" aria-label="จำนวนรายการในบ้าน"><strong>'+items.length+'</strong><span>รายการในบ้านทั้งหมด</span></section><div class="grid">'+groups.map(([name,rows],index)=>'<div class="card '+['overdue','','upcoming'][index]+'"><h2>'+name+' · '+rows.length+'</h2>'+(rows.map(({item,task})=>entry(item,task.name,item.name+' · '+fmt(task.date))).join('')||'<p class="muted">ไม่มีงานในช่วงนี้</p>')+'</div>').join('')+'<div class="card"><h2>ประกันหมดภายใน 30 วัน</h2>'+(items.filter(x=>warranty(x).date>=today()&&warranty(x).date<=due(30)).sort((a,b)=>warranty(a).date.localeCompare(warranty(b).date)).map(x=>entry(x,x.name,warranty(x).text)).join('')||'<p class="muted">ไม่มีรายการใกล้หมดประกัน</p>')+'</div></div>';
 }
 function options(values,current){return values.map(v=>'<option'+(v===current?' selected':'')+'>'+esc(v)+'</option>').join('')}
+const searchKey=value=>String(value??'').normalize('NFC').toLowerCase().replace(/\s+/g,'');
 function results(){
- return items.filter(x=>(!catFilter||x.cat===catFilter)&&(!placeFilter||x.place===placeFilter)&&[x.name,x.model,x.place].some(v=>String(v??'').toLowerCase().includes(query.trim().toLowerCase()))).map(x=>entry(x,x.name,[x.place,x.cat,x.model].filter(Boolean).join(' · '),true)).join('')||'<p>ไม่พบรายการ</p>';
+ return items.filter(x=>(!catFilter||x.cat===catFilter)&&(!placeFilter||x.place===placeFilter)&&searchKey(x.place).includes(searchKey(placeQuery))&&[x.name,x.model,x.place].some(v=>String(v??'').toLowerCase().includes(query.trim().toLowerCase()))).map(x=>entry(x,x.name,[x.place,x.cat,x.model].filter(Boolean).join(' · '),true)).join('')||'<p>ไม่พบรายการ</p>';
 }
 function list(){
- return '<h1>รายการในบ้าน</h1><div class="row filters"><input id="search" aria-label="ค้นหารายการ" placeholder="ค้นหาชื่อ รุ่น หรือจุดติดตั้ง" value="'+esc(query)+'"><select id="category" aria-label="หมวดหมู่"><option value="">ทุกหมวดหมู่</option>'+options(categories,catFilter)+'</select><select id="place" aria-label="พื้นที่"><option value="">ทุกพื้นที่</option>'+options([...new Set(items.map(x=>x.place))],placeFilter)+'</select></div><div id="results">'+results()+'</div>';
+ return '<h1>รายการในบ้าน</h1><div class="row filters"><input id="search" aria-label="ค้นหารายการ" placeholder="ค้นหาชื่อ รุ่น หรือจุดติดตั้ง" value="'+esc(query)+'"><input id="place-search" type="search" aria-label="ค้นหาตามตำแหน่งในบ้าน" placeholder="ตำแหน่ง เช่น ชั้นบน หรือห้องนอน" value="'+esc(placeQuery)+'"><select id="category" aria-label="หมวดหมู่"><option value="">ทุกหมวดหมู่</option>'+options(categories,catFilter)+'</select><select id="place" aria-label="พื้นที่"><option value="">ทุกพื้นที่</option>'+options([...new Set(items.map(x=>x.place))],placeFilter)+'</select></div><div id="results">'+results()+'</div>';
 }
 function detail(x){
  const attrs=[['ยี่ห้อ',x.brand],['รุ่น',x.model],['ซื้อ',x.purchase?fmt(x.purchase):x.year?'พ.ศ. '+(+x.year+543):''],['ติดตั้ง',x.installed?fmt(x.installed):x.installYear?'พ.ศ. '+(+x.installYear+543):''],['ระยะประกัน',x.years?x.years+' ปี':''],['วัสดุหรืออะไหล่',x.notes]];
@@ -210,6 +211,7 @@ document.addEventListener('click',event=>{
 });
 main.addEventListener('input',e=>{
  if(e.target.id==='search')query=e.target.value;
+ else if(e.target.id==='place-search')placeQuery=e.target.value;
  else if(e.target.id==='category')catFilter=e.target.value;
  else if(e.target.id==='place')placeFilter=e.target.value;
  else return;
