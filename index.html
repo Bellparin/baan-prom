@@ -170,7 +170,20 @@ document.addEventListener('click',event=>{
  }
  if(a==='task'){
   const task=i===''?null:selected.tasks[+i];
-  modal(task?'แก้ไขงาน':'เพิ่มงานบำรุงรักษา',field('ชื่องาน','name',task?.name,'text','required')+field('ทำทุก','n',task?.n??1,'number','required min="1" max="1000"')+select('หน่วย','unit',['วัน','เดือน','ปี'],task?.unit??'เดือน')+field('วันครบกำหนด','date',task?.date??today(),'date','required'),data=>{if(task)Object.assign(task,data);else selected.tasks.push({...data,history:[]})});
+  const latest=[...(task?.history??[])].sort().at(-1)??'';
+  modal(task?'แก้ไขงาน':'เพิ่มงานบำรุงรักษา',field('งานที่ต้องทำ','name',task?.name,'text','required')+field('วันที่ทำล่าสุด','last',''+latest,'date','required max="'+today()+'"')+field('ทำทุก','n',task?.n??6,'number','required min="1" max="1000"')+select('หน่วย','unit',['วัน','เดือน','ปี'],task?.unit??'เดือน')+'<p data-next aria-live="polite"></p>',({last,...data})=>{
+   const history=[...new Set([...(task?.history??[]),last])];
+   const updated={...data,date:shift(last,+data.n,data.unit),history};
+   if(task)Object.assign(task,updated);else selected.tasks.push(updated);
+  });
+  const form=dialog.querySelector('form');
+  const preview=()=>{
+   const {last,n,unit}=Object.fromEntries(new FormData(form));
+   form.querySelector('[data-next]').textContent=last&&form.elements.last.validity.valid&&form.elements.n.validity.valid?'แนะนำให้ทำครั้งถัดไป '+fmt(shift(last,+n,unit)):'กรอกวันที่ทำล่าสุดและรอบเพื่อดูวันแนะนำ';
+  };
+  form.addEventListener('input',preview);
+  form.addEventListener('change',preview);
+  preview();
  }
  if(a==='done'){
   const task=selected.tasks[+i];
